@@ -1,0 +1,11 @@
+Timestamp	user_id	現在の気分の「良し悪し」を教えてください 	現在の気分の「高まり(活動レベル)」を教えてください	subjective_fatigue	photo_link	今日の睡眠時間を教えて。	objective_fatigue	discrepancy
+2025-12-14 16:49:24	ryo	5	1	2	https://drive.google.com/open?id=19eukdd3bcKRT_sNo_nXR98ESyo_-4EVs		6.71	4.71
+2025-12-15 12:01:05	ryo	5	1	1	https://drive.google.com/open?id=1RZ528ld3AZerpFLq6fdr7qcat52xR65m		7.0	6.0
+2025-12-15 15:53:00	古宮	3	2	3	https://drive.google.com/open?id=10RS4ezZS4gTDzMCcCTZ9DxUEr4x-uJzh		5.13	2.13
+2025-12-15 18:10:14	古宮	3	3	3	https://drive.google.com/open?id=1QaVwPSwj9cpoPsX_yZePL6EnkWAFO5Uq		5.7	2.7
+2025-12-15 21:01:15	古宮	4	4	3	https://drive.google.com/open?id=1GrXFE8asxiYD9G_cnWuVdjKMIet12o8S		6.2	3.2
+2025-12-16 09:01:21	古宮	4	4	1	https://drive.google.com/open?id=1vCGDbMmu_qH5WoNpkZAPTGWE3F229zno		7.0	6.0
+2025-12-16 12:00:51	古宮	4	3	2	https://drive.google.com/open?id=18XOWTw4EJhTJ8gKsMIlUFu-VlWVC-9MS		5.28	3.2800000000000002
+2025-12-16 13:16:09	tyler	3	2	4	https://drive.google.com/open?id=1qoRCziFqtDVxSzvk2B1yzWnCXrOjVIqE		7.0	3.0
+2025-12-16 15:24:22	古宮	4	4	2	https://drive.google.com/open?id=1DsGvI2smBCs7GYijjajoH0kDBjLt2sTv		7.0	5.0
+2025-12-16 21:39:59	古宮	3	3	4	https://drive.google.com/open?id=1tNN1Pur4f1HntFa_KQV35hPOY2HTcCcI		6.45	2.45
