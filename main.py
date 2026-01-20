@@ -6,17 +6,36 @@ Main Script
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import os
+import requests
 from matplotlib import rcParams
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from face_analyzer import FaceAnalyzer
 from gpr_model import FatiguePredictor
+from openai import OpenAI
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 
+from datetime import datetime,timezone,timedelta
+from zoneinfo import ZoneInfo
+
+from dotenv import load_dotenv
+load_dotenv(override=True) 
 
 # 日本語フォント設定 (環境によって調整が必要)
 rcParams['font.sans-serif'] = ['Arial Unicode MS', 'Hiragino Sans', 'Yu Gothic', 'Meiryo']
 rcParams['axes.unicode_minus'] = False
+
+#環境変数
+spreadsheet_id = os.getenv("SPREADSHEET_ID")
+gid = os.getenv("GID")
+openai_api_key= os.getenv("OPENAI_API_KEY")
+slack_api_token= os.getenv("SLACK_API_TOKEN")
+channel_id= os.getenv("SLACK_CHANNEL_ID")
+CHANNEL = '#all-果実とナッツ'
+
 
 
 def load_data(csv_path: str) -> pd.DataFrame:
@@ -148,6 +167,7 @@ def plot_fatigue_timeline(
     plt.savefig(out_png, dpi=150)
     print(f"グラフを保存しました: {out_png}")
     plt.show()
+    return out_png
 
 
 def analyze_discrepancy(df: pd.DataFrame):
@@ -202,31 +222,134 @@ def analyze_discrepancy(df: pd.DataFrame):
 
 # Placeholder for ChatGPT API integration
 #TODO: komiyaくん実装お願いします。
-def generate_advice(subjective: float, objective: float) -> str:
+def generate_advice(hours: list) -> str:
     """
-    Placeholder for ChatGPT API integration to generate advice.
-
-    Args:
-        subjective: 主観的疲れ度
-        objective: 客観的疲れ度
-
-    Returns:
-        Placeholder message.
+    アドバイスを生成
+    
+    hours list(int が2つ): 主観と客観の差が大きいとされた時間帯上位2つのリスト
     """
-    return "[ChatGPT API integration required here]"
+    client = OpenAI()
+    completion = client.chat.completions.create(
+        model="gpt-4o",
+        temperature=0.8,
+        messages=[
+            {
+                "role": "user",
+                "content": f"""
+                あなたはユーザーの生活に関するアドバイザーです。以下のデータを元に感情のあるアドバイスをして下さい。
+                #データ
+                主観的疲労度と客観的疲労度の差が多い時間帯は、{hours[0]}時や{hours[1]}時
+
+                #メッセージの構成
+                メッセージは、挨拶の後、
+                時間を大まかに特定できる表現  に主観的な疲労度と客観的な疲労度の差がある可能性があります。
+                のような文で開始して下さい。具体的な時刻は書かないて下さい。午後や夜だけではなく細かく述べて下さい。
+                次に、具体的で小さな行動の提案を含めて下さい。
+
+                #注意事項
+                200文字以内で回答して下さい。
+                断定を避けて下さい。
+                具体的な時刻は書かないて下さい。
+                """
+            }
+        ]
+        )
+    advise= completion.choices[0].message.content
+    return advise
 
 
 # Placeholder for Slack Bot notification
 def send_slack_message(message: str):
     """
-    Placeholder for Slack Bot notification.
+    メッセージをslackに送信
     #TODO: komiyaくん実装お願いします。
 
     Args:
         message: 送信するメッセージ
     """
-    print("[Slack Bot integration required here]")
+    url = "https://slack.com/api/chat.postMessage"
+    headers = {"Authorization": "Bearer "+slack_api_token}
+    data  = {
+    'channel': CHANNEL,
+    'text': message
+    }
+    r = requests.post(url, headers=headers, data=data)
+    print("return ", r.json())
 
+def send_png_to_slack(file_path:str):
+    """pngファイルをslackに送信
+
+    Args:
+        file_path (str): pngファイルのパス
+    """
+    client = WebClient(token=slack_api_token)
+    try:
+        response = client.files_upload_v2(
+            channel=channel_id, 
+            file=file_path,
+            )
+        assert response["file"]  # the uploaded file
+    except SlackApiError as e:
+        # You will get a SlackApiError if "ok" is False
+        assert e.response["ok"] is False
+        assert e.response["error"]  # str like 'invalid_auth', 'channel_not_found'
+        print(f"Got an error: {e.response['error']}")
+
+def slack_scheduled_message(unix_time:int, message:str):
+    """指定のUNIX時間にslackにメッセージを送信する
+
+    Args:
+        unix_time (int): UNIX時間
+        message(str):送信するメッセージ
+    """
+    url = "https://slack.com/api/chat.scheduleMessage"
+    headers = {"Authorization": "Bearer "+slack_api_token}
+    data  = {
+    'channel': CHANNEL,
+    'post_at':unix_time,
+    'text': message,
+    }
+    r = requests.post(url, headers=headers, data=data)
+    print("scheduled message return ", r.json())
+
+def next_time_jst_and_unix(time: np):
+    """
+    gpr関数で算出された時刻 12.0などから次のその時刻のUNIX時間を返す
+
+    time: 12.0など
+    戻り: (next_dt_jst, unix_seconds)
+    """
+    JST = ZoneInfo("Asia/Tokyo")
+    now = datetime.now(JST)
+
+    # "a:b" をパース
+    parts = str(time).strip().split(".")
+    print(parts)
+
+    hour = int(parts[0])
+    minute= int((float(time) - hour)*60) # 小数点0.25 が15分
+
+    # 今日のその時刻（秒は0固定）
+    candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    # すでに過ぎていれば明日へ
+    if candidate <= now:
+        candidate += timedelta(days=1)
+
+    unix_seconds = int(candidate.timestamp())  # UNIX時間（秒）
+    return candidate, unix_seconds
+
+
+
+def google_sheet_to_csv(spreadsheet_id:str, gid:str):
+    csv_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=csv&gid={gid}"
+    df = pd.read_csv(csv_url)
+    df= df.rename(columns={
+    "ユーザー(識別子)":"user_id",
+    '現在の「疲れ具合」を教えてください\n\n1　非常に明敏で完全に目が覚めている\n2　非常にエネルギッシュだが、もはやピークではない\n3　ある程度の活力がある\n4　少し疲れていて、エネルギーが不足している\n5　中程度の疲労感がある\n6　非常に疲れていて、集中力が低い\n7　疲れ果てている':"subjective_fatigue",
+    '今の顔画像をアップロードして☆':"photo_link"
+    })
+    df.to_csv("../response_2.csv", index=False)
 
 def main():
     """
@@ -235,7 +358,10 @@ def main():
     print("="*60)
     print("Kyu (休) MVP - Fatigue Prediction System")
     print("="*60)
-    
+
+    # google formの回答読み込み
+    google_sheet_to_csv(spreadsheet_id,gid)
+
     # 1. データ読み込み
     csv_path = '../response.csv'  # 一つ上のディレクトリをデフォルトに設定してます
     if not Path(csv_path).exists():
@@ -298,7 +424,7 @@ def main():
     
     # 6. 可視化
     print("\n[5] タイムライン可視化")
-    plot_fatigue_timeline(df, predictor_normal, predictor_corrected, user_id=target_user)
+    png_file_path= plot_fatigue_timeline(df, predictor_normal, predictor_corrected, user_id=target_user)
     
     # 7. サンプル予測
     print("\n[6] 予測例")
@@ -313,17 +439,31 @@ def main():
     
     # 8. ChatGPT APIとSlack通知
     print("\n[7] ChatGPT APIとSlack通知")
-    for idx, row in df.iterrows():
-        subjective = row['subjective_fatigue']
-        objective = row['objective_fatigue']
-        advice = generate_advice(subjective, objective)
-        message = (
-            f"ユーザー: {row['user_id']}\n"
-            f"主観的疲れ度: {subjective}\n"
-            f"客観的疲れ度: {objective}\n"
-            f"アドバイス: {advice}"
-        )
-        send_slack_message(message)
+
+    #df_user は1ユーザーの全データ
+    df_user["hour"] = df_user["Timestamp"].dt.hour
+    df_user["diff"]= df_user["objective_fatigue"]- df_user["subjective_fatigue"]
+    median_by_hour= df_user.groupby("hour")["diff"].median()
+    print("各時刻の客観-主観の中央値",median_by_hour)
+    top2_hours = median_by_hour.dropna().sort_values(ascending=False).head(2).index.tolist()
+    print(top2_hours)
+
+    advise= generate_advice(top2_hours)
+    print(advise)
+    send_slack_message(advise)
+    png_file_path= "/Users/komiya/Downloads/Slack_icon_2019.svg.png"
+    send_png_to_slack(file_path= png_file_path)
+
+    # 予約投稿
+    peak_time = predictor_corrected.get_peak_time()#ユーザーが単一の場合
+    print(f"予測疲労度が最も高い時間: {peak_time}")
+    jst_timestamp, unix_time= next_time_jst_and_unix(peak_time)
+    print(jst_timestamp, unix_time)
+    # 予約投稿のプロンプト
+    # モデルが算出した時刻に顔画像を送って下さい。という通知を送る
+    # ここにはgoogle formのURLも含まれるか
+    message = "scheduled message関数 test"
+    slack_scheduled_message(unix_time, message)
     
     print("\n" + "="*60)#しきりデザイン
     print("分析完了!")

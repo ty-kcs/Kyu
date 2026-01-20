@@ -186,6 +186,15 @@ class FatiguePredictor:
         high_uncertainty_hours = X_test[high_uncertainty_mask].flatten()
         
         return high_uncertainty_hours
+   
+    def get_peak_time(self):
+        if not self.is_fitted:
+            return None
+        hours = np.arange(0, 24, 0.25)
+        mean_normal, _ = self.predict(hours=hours)
+        max_index = np.argmax(mean_normal)
+        peak_time = hours[max_index]
+        return peak_time
 
 
 if __name__ == "__main__":

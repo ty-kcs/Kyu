@@ -29,3 +29,5 @@ output/
 
 # Ignore test artifacts
 *.pytest_cache/
+
+*.csv
