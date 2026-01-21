@@ -108,14 +108,14 @@ GPRの標準偏差が高い時間帯 = データ不足 → 通知を送るべき
 
 ### 2: OpenFace導入(飯塚)
 
-#### OpenFace実行方法（）
+#### OpenFace実行方法
 - このレポジトリをクローン
 - OpenFaceのモデルをダウンロード(OpenFace/download_models.ps1を実行)
 - ライブラリをダウンロード(OpenFace/download_libraries.ps1)
 - OpenFaceをビルド(Visual StudioでOpenFace/OpenFace.slnをBuild Solution)
-- predict_fatigue.pyの10行目(OPENFACE_BIN)をビルドしたexecutbleに入れ替える
+- predict_fatigue.pyの10行目(OPENFACE_BIN)をビルドしたexecutableに入れ替える
 - 以下のコマンドで実行(入力: 顔画像 出力:疲れ度(三段階: 低(1-2), 中(3-5), 高(6-7)) 信頼度: %)
--  ```bash
+  ```bash
   python predict_fatigue.py path/to/your/image.jpg
   ``` 
 ---
