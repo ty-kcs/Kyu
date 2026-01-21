@@ -7,12 +7,11 @@ import shutil
 
 MODEL_PATH = 'fatigue_model.pkl'
 
-OPENFACE_BIN = './OpenFace/build/bin/FeatureExtraction' 
+OPENFACE_BIN = 'PATH TO FeatureExtraction.exe' # ←パス入れ替える 
 
 # Temporary  for OpenFace outputs
 TEMP_DIR = 'temp_inference'
 
-# Class Labels (Must match the training mapping: 0=Low, 1=Mod, 2=High)
 LABELS = {
     0: "疲れ度:低 (1-2)",
     1: "疲れ度:中 (3-5)",
