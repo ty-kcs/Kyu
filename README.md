@@ -106,18 +106,18 @@ GPRの標準偏差が高い時間帯 = データ不足 → 通知を送るべき
 
 ---
 
-### 2: 顔解析の精度向上と通知の最適化
+### 2: OpenFace導入(飯塚)
 
-#### 1. OpenFaceの本格導入(担当:たい)
-- モック実装からOpenFaceによる実解析へ移行
-- 顔写真アップロード・AUデータ取得・疲労度スコア計算
-- `FaceAnalyzer.extract_action_units`の本番化
-
-#### 2. 通知タイミングの最適化（担当: komiyaくん）
-- GPRモデルで疲労ピークタイムを特定
-- ピークタイムに合わせてSlack通知を送れる仕組みを作る
-- `get_high_uncertainty_periods`の拡張
-
+#### OpenFace実行方法（）
+- このレポジトリをクローン
+- OpenFaceのモデルをダウンロード(OpenFace/download_models.ps1を実行)
+- ライブラリをダウンロード(OpenFace/download_libraries.ps1)
+- OpenFaceをビルド(Visual StudioでOpenFace/OpenFace.slnをBuild Solution)
+- predict_fatigue.pyの10行目(OPENFACE_BIN)をビルドしたexecutbleに入れ替える
+- 以下のコマンドで実行(入力: 顔画像 出力:疲れ度(三段階: 低(1-2), 中(3-5), 高(6-7)) 信頼度: %)
+-  ```bash
+  python predict_fatigue.py path/to/your/image.jpg
+  ``` 
 ---
 
 ### 3: 自動検知と完全自律化（まあ、余裕あったら）
