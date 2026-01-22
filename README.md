@@ -11,10 +11,7 @@
 ## システム構成
 
 ### 1. face_analyzer.py
-- OpenFaceのAction Units (AU04, AU43) から客観的疲労度を算出
-- **AU04** (Brow Lowerer): ストレス・緊張指標
-- **AU43** (Eyes Closed): 眠気指標
-- 計算式: `Score_obj = 1 + min(6, (w1*AU04 + w2*AU43) * scaling_factor)`(この式はまじチャットGPT作成です。追々ちゃんとしたシステムにします。)
+- OpenFaceのAction Units から客観的疲労度を算出
 
 ### 2. gpr_model.py
 - ガウス過程回帰 (GPR) による24時間疲労度予測
