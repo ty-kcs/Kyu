@@ -221,7 +221,6 @@ def analyze_discrepancy(df: pd.DataFrame):
 
 
 # Placeholder for ChatGPT API integration
-#TODO: komiyaくん実装お願いします。
 def generate_advice(hours: list) -> str:
     """
     アドバイスを生成
@@ -259,11 +258,9 @@ def generate_advice(hours: list) -> str:
 
 
 # Placeholder for Slack Bot notification
-def send_slack_message(message: str):
+def send_slack_message(message: str, slack_api_token=slack_api_token):
     """
     メッセージをslackに送信
-    #TODO: komiyaくん実装お願いします。
-
     Args:
         message: 送信するメッセージ
     """
@@ -450,7 +447,7 @@ def main():
 
     advise= generate_advice(top2_hours)
     print(advise)
-    send_slack_message(advise)
+    send_slack_message(advise, slack_api_token)
     png_file_path= "/Users/komiya/Downloads/Slack_icon_2019.svg.png"
     send_png_to_slack(file_path= png_file_path)
 
@@ -459,10 +456,11 @@ def main():
     print(f"予測疲労度が最も高い時間: {peak_time}")
     jst_timestamp, unix_time= next_time_jst_and_unix(peak_time)
     print(jst_timestamp, unix_time)
-    # 予約投稿のプロンプト
-    # モデルが算出した時刻に顔画像を送って下さい。という通知を送る
-    # ここにはgoogle formのURLも含まれるか
-    message = "scheduled message関数 test"
+    # 予約投稿
+    message = """
+    顔画像から疲労度を推定するため、こちらから顔画像をアップロードお願いします。
+    https://docs.google.com/forms/d/e/1FAIpQLSeVNL2F26IbOEw55kCpjlcZLTGDdXC-goEN3kioUgZT-ywbEA/viewform?usp=header
+    """
     slack_scheduled_message(unix_time, message)
     
     print("\n" + "="*60)#しきりデザイン
