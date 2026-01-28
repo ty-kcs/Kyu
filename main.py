@@ -348,7 +348,7 @@ def google_sheet_to_csv(spreadsheet_id:str, gid:str):
     })
     df.to_csv("../response_2.csv", index=False)
 
-def main():
+def main(user_id):
     """
     テスト
     """
@@ -383,8 +383,8 @@ def main():
     # 4. GPRモデル学習
     print("\n[3] ガウス過程回帰モデル学習")
     
-    # 特定ユーザーで分析 (データが多いユーザーを選択)
-    target_user = df['user_id'].value_counts().idxmax()
+    # 特定ユーザーで分析 
+    target_user = user_id
     df_user = df[df['user_id'] == target_user].copy()
     print(f"  - 対象ユーザー: {target_user} ({len(df_user)}件)")
     
@@ -448,7 +448,7 @@ def main():
     advise= generate_advice(top2_hours)
     print(advise)
     send_slack_message(advise, slack_api_token)
-    png_file_path= "/Users/komiya/Downloads/Slack_icon_2019.svg.png"
+    # png_file_path= "/Users/komiya/Downloads/Slack_icon_2019.svg.png"
     send_png_to_slack(file_path= png_file_path)
 
     # 予約投稿
@@ -456,6 +456,10 @@ def main():
     print(f"予測疲労度が最も高い時間: {peak_time}")
     jst_timestamp, unix_time= next_time_jst_and_unix(peak_time)
     print(jst_timestamp, unix_time)
+    
+    #デモ用の時刻指定
+    # unix_time= 1769066220		
+    
     # 予約投稿
     message = """
     顔画像から疲労度を推定するため、こちらから顔画像をアップロードお願いします。
@@ -469,4 +473,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    user_id = input("Google Formに記入したユーザー名を入力してください: ")
+    main(user_id)
