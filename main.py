@@ -10,7 +10,6 @@ import os
 import re
 import requests
 from typing import Optional
-from matplotlib import rcParams
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -25,11 +24,6 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 load_dotenv(override=True) 
-
-# 日本語フォント設定
-rcParams['font.sans-serif'] = ['Noto Sans CJK JP']
-rcParams['font.family'] = 'sans-serif'
-rcParams['axes.unicode_minus'] = False
 
 #環境変数
 spreadsheet_id = os.getenv("SPREADSHEET_ID")
