@@ -55,7 +55,8 @@ def load_data(csv_path: str) -> pd.DataFrame:
     
     # photo_linkがない行は空文字に統一
     df['photo_link'] = df['photo_link'].fillna('')
-    
+    print(df)
+
     # 主観的疲労度の欠損値を除外
     df = df.dropna(subset=['subjective_fatigue'])
     
@@ -341,11 +342,16 @@ def next_time_jst_and_unix(time: np):
 def google_sheet_to_csv(spreadsheet_id:str, gid:str):
     csv_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=csv&gid={gid}"
     df = pd.read_csv(csv_url)
-    df= df.rename(columns={
-    "ユーザー(識別子)":"user_id",
-    '現在の「疲れ具合」を教えてください\n\n1　非常に明敏で完全に目が覚めている\n2　非常にエネルギッシュだが、もはやピークではない\n3　ある程度の活力がある\n4　少し疲れていて、エネルギーが不足している\n5　中程度の疲労感がある\n6　非常に疲れていて、集中力が低い\n7　疲れ果てている':"subjective_fatigue",
-    '今の顔画像をアップロードして☆':"photo_link"
-    })
+    new_cols={}
+    for c in df.columns:
+        if c.startswith('現在の「疲れ具合」を教えてください'):
+            new_cols[c] = "subjective_fatigue"
+        if c.startswith('今の顔画像をアップロードして'):
+            new_cols[c] = "photo_link"
+        if c == "ユーザー(識別子)":
+            new_cols[c] = "user_id"
+
+    df = df.rename(columns=new_cols)
     df.to_csv("../response.csv", index=False)
 
 def main(user_id):
