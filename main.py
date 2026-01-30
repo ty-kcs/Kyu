@@ -42,13 +42,13 @@ from matplotlib import rcParams
 from matplotlib import font_manager
 
 # 日本語フォント設定
-rcParams['font.sans-serif'] = ['Noto Sans CJK JP']
+rcParams['font.sans-serif'] = ['/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc']
 rcParams['font.family'] = 'sans-serif'
 rcParams['axes.unicode_minus'] = False
 
 # フォントが正しく設定されているか確認
-print("Available fonts:", font_manager.findSystemFonts(fontpaths=None, fontext='ttf'))
-print("Current font settings:", rcParams['font.sans-serif'])
+#print("Available fonts:", font_manager.findSystemFonts(fontpaths=None, fontext='ttf'))
+#print("Current font settings:", rcParams['font.sans-serif'])
 
 def load_data(csv_path: str) -> pd.DataFrame:
     """
