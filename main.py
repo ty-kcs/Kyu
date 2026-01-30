@@ -41,6 +41,7 @@ CHANNEL = '#all-果実とナッツ'
 MODEL_PATH = os.getenv("FATIGUE_MODEL_PATH", "fatigue_model.pkl")
 OPENFACE_BIN = os.getenv("OPENFACE_BIN", "PATH TO FeatureExtraction.exe")
 TEMP_DIR = os.getenv("OPENFACE_TEMP_DIR", "temp_inference")
+FACE_CACHE_DIR = os.getenv("FACE_CACHE_DIR", "face_cache")
 
 
 
@@ -400,7 +401,7 @@ def main(user_id):
     テスト
     """
     print("="*60)
-    print("Kyu (休) MVP - Fatigue Prediction System")
+    print("Kyu (休)")
     print("="*60)
 
     # google formの回答読み込み
@@ -423,6 +424,7 @@ def main(user_id):
         model_path=MODEL_PATH,
         openface_bin=OPENFACE_BIN,
         temp_dir=TEMP_DIR,
+        cache_dir=FACE_CACHE_DIR,
     )
     df = analyze_faces(df, analyzer)
     photo_count = df['objective_fatigue_score'].notna().sum()
