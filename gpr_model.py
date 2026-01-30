@@ -79,19 +79,21 @@ class FatiguePredictor:
             補正後の疲労度 (N,)
         """
         corrected = subjective.copy()
+        objective_series = pd.to_numeric(pd.Series(objective), errors="coerce")
+        objective_values = objective_series.to_numpy()
         
         for i in range(len(subjective)):
-            if np.isnan(objective[i]):
+            if np.isnan(objective_values[i]):
                 # 客観データ(顔写真）がない場合は主観をそのまま使用
                 continue
             
-            diff = objective[i] - subjective[i]
+            diff = objective_values[i] - subjective[i]
             
             # 客観が主観よりthreshold以上高い場合のみ補正
             if diff > self.correction_threshold:
                 # 客観値を重視した加重平均
                 corrected[i] = (
-                    self.correction_weight * objective[i] +
+                    self.correction_weight * objective_values[i] +
                     (1 - self.correction_weight) * subjective[i]
                 )
                 

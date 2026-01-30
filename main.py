@@ -10,7 +10,6 @@ import os
 import re
 import requests
 from typing import Optional
-from matplotlib import rcParams
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -26,10 +25,6 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 load_dotenv(override=True) 
 
-# 日本語フォント設定 (環境によって調整が必要)
-rcParams['font.sans-serif'] = ['Arial Unicode MS', 'Hiragino Sans', 'Yu Gothic', 'Meiryo']
-rcParams['axes.unicode_minus'] = False
-
 #環境変数
 spreadsheet_id = os.getenv("SPREADSHEET_ID")
 gid = os.getenv("GID")
@@ -41,8 +36,25 @@ CHANNEL = '#all-果実とナッツ'
 MODEL_PATH = os.getenv("FATIGUE_MODEL_PATH", "fatigue_model.pkl")
 OPENFACE_BIN = os.getenv("OPENFACE_BIN", "PATH TO FeatureExtraction.exe")
 TEMP_DIR = os.getenv("OPENFACE_TEMP_DIR", "temp_inference")
+FACE_CACHE_DIR = os.getenv("FACE_CACHE_DIR", "face_cache")
 
+from matplotlib import rcParams
+from matplotlib import font_manager
 
+# 日本語フォント設定
+font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+
+font_prop = font_manager.FontProperties(
+    fname=font_path,
+    size=12
+)
+
+rcParams["font.family"] = font_prop.get_name()
+rcParams["axes.unicode_minus"] = False
+
+# フォントが正しく設定されているか確認
+#print("Available fonts:", font_manager.findSystemFonts(fontpaths=None, fontext='ttf'))
+#print("Current font settings:", rcParams['font.sans-serif'])
 
 def load_data(csv_path: str) -> pd.DataFrame:
     """
@@ -212,28 +224,36 @@ def plot_fatigue_timeline(
     return out_png
 
 
-def analyze_discrepancy(df: pd.DataFrame):
+def analyze_discrepancy(df: pd.DataFrame, user_id: Optional[str] = None):
     """
     主観と客観のズレ(乖離)を分析してレポート。
+    
+    Args:
+        df: 元のDataFrame
+        user_id: 特定ユーザーのみ分析する場合
     """
-    #objective_fatigue_scoreが存在する行のみ抽出
+    # user_idでフィルタリング
+    if user_id:
+        df = df[df['user_id'] == user_id].copy()
+
+    # objective_fatigue_scoreが存在する行のみ抽出
     df_valid = df[df['objective_fatigue_score'].notna()].copy()
     output_dir = Path("output")
     output_dir.mkdir(exist_ok=True)
-    
+
     if len(df_valid) == 0:
         print("客観データがないため、乖離分析をスキップします。")
         return
-    
+
     df_valid['discrepancy'] = df_valid['objective_fatigue_score'] - df_valid['subjective_fatigue']
-    
+
     # 統計情報
     mean_discrepancy = df_valid['discrepancy'].mean()
     std_discrepancy = df_valid['discrepancy'].std()
-    
+
     # 過小評価ケース (客観が主観より2以上高い、つまり疲れているのに疲れていないと感じている)
     underestimate_cases = df_valid[df_valid['discrepancy'] > 2.0]
-    
+
     print("\n" + "="*60)
     print("【主観と客観の乖離分析】")
     print("="*60)
@@ -242,12 +262,11 @@ def analyze_discrepancy(df: pd.DataFrame):
     print(f"標準偏差: {std_discrepancy:.2f}")
     print(f"\n「頑張りすぎ」検出:")
     print(f"  - 客観が主観より2以上高いケース: {len(underestimate_cases)}件 ({len(underestimate_cases)/len(df_valid)*100:.1f}%)")
-    
+
     if len(underestimate_cases) > 0:
         print(f"\n【危険な「自覚なき疲労」の例】")
         print(underestimate_cases[['Timestamp', 'user_id', 'subjective_fatigue', 
                        'objective_fatigue_score', 'discrepancy']].head(5))
-    #これをChatGPT APIに渡してアドバイス生成とかに活用する
     # --- ChatGPT APIに渡すと効果的な情報をtxtで保存 ---
     # 1. 乖離統計
     with open(output_dir / "discrepancy_stats.txt", "w", encoding="utf-8") as f:
@@ -400,7 +419,7 @@ def main(user_id):
     テスト
     """
     print("="*60)
-    print("Kyu (休) MVP - Fatigue Prediction System")
+    print("Kyu (休)")
     print("="*60)
 
     # google formの回答読み込み
@@ -423,13 +442,14 @@ def main(user_id):
         model_path=MODEL_PATH,
         openface_bin=OPENFACE_BIN,
         temp_dir=TEMP_DIR,
+        cache_dir=FACE_CACHE_DIR,
     )
     df = analyze_faces(df, analyzer)
     photo_count = df['objective_fatigue_score'].notna().sum()
     print(f"  - 解析成功: {photo_count}件 / {len(df)}件")
     
     # 3. 乖離分析
-    analyze_discrepancy(df)
+    analyze_discrepancy(df, user_id=user_id)
     
     # 4. GPRモデル学習
     print("\n[3] ガウス過程回帰モデル学習")
