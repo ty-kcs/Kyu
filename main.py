@@ -346,7 +346,7 @@ def google_sheet_to_csv(spreadsheet_id:str, gid:str):
     '現在の「疲れ具合」を教えてください\n\n1　非常に明敏で完全に目が覚めている\n2　非常にエネルギッシュだが、もはやピークではない\n3　ある程度の活力がある\n4　少し疲れていて、エネルギーが不足している\n5　中程度の疲労感がある\n6　非常に疲れていて、集中力が低い\n7　疲れ果てている':"subjective_fatigue",
     '今の顔画像をアップロードして☆':"photo_link"
     })
-    df.to_csv("../response_2.csv", index=False)
+    df.to_csv("../response.csv", index=False)
 
 def main(user_id):
     """
