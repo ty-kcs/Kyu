@@ -192,7 +192,11 @@ class FaceAnalyzer:
         cmd = [self.openface_bin, "-f", image_path, "-au_static", "-out_dir", self.temp_dir]
 
         try:
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if proc.stdout:
+                print(proc.stdout)
+            if proc.stderr:
+                print(proc.stderr)
         except subprocess.CalledProcessError:
             print("Error: OpenFace failed to process the image.")
             return None
