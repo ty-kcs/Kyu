@@ -1,109 +1,150 @@
 """
 FaceAnalyzer Module
 OpenFaceのAction Units (AU) から客観的疲労度を算出するモジュール。
-今回は仮実装。
+分類モデルで「低/中/高」ラベルを返す。
 """
 
-from typing import Dict, Optional
-import numpy as np
+from typing import Dict, Optional, Tuple
 import os
+import shutil
+import subprocess
+
+import joblib
+import pandas as pd
 
 
 class FaceAnalyzer:
     """
     顔写真から客観的な疲れ度を算出するクラス。
-    OpenFaceのAU (Action Units) 出力をもとに、疲労スコア(1-7)を計算する。
+    OpenFaceのAU (Action Units) 出力をもとに、分類モデルでラベルを推論する。
     """
 
     def __init__(
         self,
-        weight_au04: float = 1.0,
-        weight_au43: float = 1.5,
-        scaling_factor: float = 1.2
+        model_path: str = "fatigue_model.pkl",
+        openface_bin: Optional[str] = None,
+        temp_dir: str = "temp_inference",
+        labels: Optional[Dict[int, str]] = None
     ):
         """
         Args:
-            weight_au04: AU04 (Brow Lowerer - ストレス・緊張) の重み
-            weight_au43: AU43 (Eyes Closed - 眠気) の重み
-            scaling_factor: 最終スコアへの変換スケール係数
+            model_path: 事前学習済みモデルのパス
+            openface_bin: OpenFace FeatureExtraction のパス
+            temp_dir: OpenFaceの出力一時ディレクトリ
+            labels: 分類ラベルのマッピング
         """
-        self.weight_au04 = weight_au04
-        self.weight_au43 = weight_au43
-        self.scaling_factor = scaling_factor
-
-    def extract_action_units(self, image_path: str) -> Dict[str, float]:
-        """
-        画像からAction Unitsを抽出する (モック実装)。
-        本番環境ではOpenFaceバイナリを実行してCSV出力を解析する。
-        今回は画像ファイルの存在チェックのみ行い、ランダムなAU値を返す。
-        Args:
-            image_path: 顔写真へのパス (Google Driveリンクの場合は事前ダウンロード想定)
-        Returns:
-            AU値の辞書 (キー: AU名, 値: 強度 0.0-5.0)
-        
-        Raises:
-            FileNotFoundError: 画像ファイルが存在しない場合
-        """
-        # 実装時のダミーチェック
-        if image_path and not image_path.startswith("http"):
-            if not os.path.exists(image_path):
-                raise FileNotFoundError(f"Image not found: {image_path}")
-
-        # --- モック: 実際はOpenFaceを実行 ---
-        # 例: subprocess.run(['FeatureExtraction', '-f', image_path, '-out_dir', ...])
-        # その後、生成されたCSVを読み込み
-        
-        # 今はランダム値を返すが、実データでは0.0-5.0の範囲でAUが出力される
-        np.random.seed(hash(image_path) % 2**32)  # 再現性のため
-        au_values = {
-            "AU04_r": np.random.uniform(0.5, 3.5),  # Brow Lowerer
-            "AU43_r": np.random.uniform(0.0, 2.5),  # Eyes Closed
-            "AU06_r": np.random.uniform(0.0, 2.0),  # Cheek Raiser (参考用)
-            "AU12_r": np.random.uniform(0.0, 3.0),  # Lip Corner Puller (笑顔)
+        self.model_path = model_path
+        self.openface_bin = openface_bin
+        self.temp_dir = temp_dir
+        self.labels = labels or {
+            0: "疲れ度:低 (1-2)",
+            1: "疲れ度:中 (3-5)",
+            2: "疲れ度:高 (6-7)"
         }
-        return au_values
+        self.model = None
 
-    def calculate_objective_fatigue(self, au_values: Dict[str, float]) -> float:
+    def load_model(self) -> None:
+        if not os.path.exists(self.model_path):
+            raise FileNotFoundError(f"Model file not found: {self.model_path}")
+        self.model = joblib.load(self.model_path)
+
+    def extract_action_units(self, image_path: str) -> Optional[pd.DataFrame]:
         """
-        Action Units から客観的疲労度スコア(1-7)を計算。
-        
-        Formula:
-            Score_obj = 1 + min(6, (w1 * AU04 + w2 * AU43) * scaling_factor)
-        
+        画像からAction Unitsを抽出する。
+
         Args:
-            au_values: extract_action_units() の出力
-        
-        Returns:
-            客観的疲労度 (1.0 - 7.0)
-        """
-        au04 = au_values.get("AU04_r", 0.0)
-        au43 = au_values.get("AU43_r", 0.0)
-        
-        weighted_sum = (
-            self.weight_au04 * au04 +
-            self.weight_au43 * au43
-        )
-        
-        score = 1.0 + min(6.0, weighted_sum * self.scaling_factor)
-        return round(score, 2)
+            image_path: 顔写真へのパス
 
-    def analyze_image(self, image_path: Optional[str]) -> Optional[float]:
+        Returns:
+            OpenFaceのCSVを読み込んだDataFrame。失敗時はNone。
         """
-        画像パスから客観的疲労度を算出する統合メソッド。
+        if not image_path or not os.path.exists(image_path):
+            raise FileNotFoundError(f"Image not found: {image_path}")
+
+        if not self.openface_bin:
+            raise ValueError("OpenFace binary path is not set.")
+
+        if not os.path.exists(self.temp_dir):
+            os.makedirs(self.temp_dir)
+
+        cmd = [self.openface_bin, "-f", image_path, "-au_static", "-out_dir", self.temp_dir]
+
+        try:
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except subprocess.CalledProcessError:
+            print("Error: OpenFace failed to process the image.")
+            return None
+        except FileNotFoundError:
+            print(f"Error: Could not find OpenFace binary at {self.openface_bin}")
+            return None
+
+        filename = os.path.basename(image_path)
+        csv_name = os.path.splitext(filename)[0] + ".csv"
+        csv_path = os.path.join(self.temp_dir, csv_name)
+
+        if not os.path.exists(csv_path):
+            print("Error: Output CSV not found.")
+            return None
+
+        try:
+            df = pd.read_csv(csv_path)
+            shutil.rmtree(self.temp_dir)
+            return df
+        except Exception as e:
+            print(f"Error reading features: {e}")
+            return None
+
+    def calculate_objective_fatigue(self, au_df: pd.DataFrame) -> Tuple[str, float, list]:
+        """
+        AU特徴量から分類モデルで疲労度ラベルを推論する。
+
+        Args:
+            au_df: extract_action_units() の出力DataFrame
+
+        Returns:
+            (ラベル, 信頼度[%], クラス確率配列)
+        """
+        if self.model is None:
+            self.load_model()
+
+        au_cols = [c for c in au_df.columns if "AU" in c and "_r" in c]
+        features = au_df[au_cols]
+
+        if features.empty:
+            raise ValueError("No AU features found in OpenFace output.")
+
+        if features.shape[1] != self.model.n_features_in_:
+            raise ValueError(
+                f"Feature mismatch: Model expects {self.model.n_features_in_} features, "
+                f"but got {features.shape[1]}."
+            )
+
+        prediction_idx = self.model.predict(features)[0]
+        probabilities = self.model.predict_proba(features)[0]  # 確率配列
+        result_label = self.labels.get(prediction_idx, "Unknown")
+        confidence = float(probabilities[prediction_idx] * 100)
+
+        return result_label, confidence, probabilities.tolist()
+
+    def analyze_image(self, image_path: Optional[str]) -> Optional[Tuple[str, float, list]]:
+        """
+        画像パスから客観的疲労度ラベルを算出する統合メソッド。
         
         Args:
             image_path: 顔写真へのパス。Noneまたは空文字列の場合はNoneを返す。
         
         Returns:
-            客観的疲労度スコア (1-7)。画像がない場合はNone。
+            (疲労度ラベル, 信頼度, クラス確率配列) 。画像がない場合はNone。
         """
         if not image_path or image_path.strip() == "":
             return None
         
         try:
-            au_values = self.extract_action_units(image_path)
-            objective_score = self.calculate_objective_fatigue(au_values)
-            return objective_score
+            au_df = self.extract_action_units(image_path)
+            if au_df is None or au_df.empty:
+                return None
+            result = self.calculate_objective_fatigue(au_df)
+            return result
         except Exception as e:
             print(f"Warning: Failed to analyze {image_path}: {e}")
             return None
@@ -111,21 +152,16 @@ class FaceAnalyzer:
 
 if __name__ == "__main__":
     # 簡易テスト
-    analyzer = FaceAnalyzer()
-    
-    # テスト用パス
+    analyzer = FaceAnalyzer(
+        model_path="fatigue_model.pkl",
+        openface_bin="PATH TO FeatureExtraction.exe"
+    )
+
     test_paths = [
         "https://drive.google.com/open?id=1vt1tm4N4f7r834ZNPq1PYEX9vmIjhq9Q",
         "https://drive.google.com/open?id=1ZI3vWqWUJcs3R9fFmAQZet-rMh-fhYp6",
     ]
-    
+
     for path in test_paths:
-        if path:
-            au = analyzer.extract_action_units(path)
-            score = analyzer.calculate_objective_fatigue(au)
-            print(f"Path: {path}")
-            print(f"  AU04: {au['AU04_r']:.2f}, AU43: {au['AU43_r']:.2f}")
-            print(f"  Objective Fatigue: {score}")
-        else:
-            result = analyzer.analyze_image(path)
-            print(f"Path: (empty) -> {result}")
+        result = analyzer.analyze_image(path)
+        print(f"Path: {path} -> {result}")

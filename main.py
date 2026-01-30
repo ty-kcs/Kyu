@@ -7,7 +7,9 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import re
 import requests
+from typing import Optional
 from matplotlib import rcParams
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -35,6 +37,10 @@ openai_api_key= os.getenv("OPENAI_API_KEY")
 slack_api_token= os.getenv("SLACK_API_TOKEN")
 channel_id= os.getenv("SLACK_CHANNEL_ID")
 CHANNEL = '#all-果実とナッツ'
+
+MODEL_PATH = os.getenv("FATIGUE_MODEL_PATH", "fatigue_model.pkl")
+OPENFACE_BIN = os.getenv("OPENFACE_BIN", "PATH TO FeatureExtraction.exe")
+TEMP_DIR = os.getenv("OPENFACE_TEMP_DIR", "temp_inference")
 
 
 
@@ -66,26 +72,61 @@ def load_data(csv_path: str) -> pd.DataFrame:
     return df
 
 
+def compute_score_from_probs(probabilities: Optional[list], label: Optional[str]) -> Optional[float]:
+    """
+    FaceAnalyzerの出力（確率配列があれば）を使って数値スコアを返す。
+    - 確率配列がある場合：各クラスの代表値(低=1.5, 中=4.0, 高=6.5)で期待値を計算
+    - なければ従来のラベル固定値にフォールバック
+    """
+    class_means = [1.5, 4.0, 6.5]  # クラス順は FaceAnalyzerのモデルクラス順に合わせる前提
+    label_map = {"疲れ度:低 (1-2)": 1.5, "疲れ度:中 (3-5)": 4.0, "疲れ度:高 (6-7)": 6.5}
+    if probabilities is not None:
+        probs = list(probabilities)
+        # 長さが合わない場合
+        if len(probs) == len(class_means):
+            return float(sum(p * m for p, m in zip(probs, class_means)))
+    return label_map.get(label)
+
+
 def analyze_faces(df: pd.DataFrame, analyzer: FaceAnalyzer) -> pd.DataFrame:
     """
-    DataFrameの各行に対して顔解析を実行し、objective_fatigueカラム(客観疲労度スコアを入れる）を追加。
+    DataFrameの各行に対して顔解析を実行し、客観疲労度ラベル/信頼度/スコアを追加。
     
     Args:
         df: 元のDataFrame
         analyzer: FaceAnalyzerインスタンス
     
     Returns:
-        objective_fatigueカラムが追加されたDataFrame
+        objective_fatigue_label/confidence/scoreが追加されたDataFrame
     """
     df = df.copy()
+    objective_labels = []
+    objective_confidences = []
     objective_scores = []
     
     for idx, row in df.iterrows():
         photo_link = row['photo_link']
-        score = analyzer.analyze_image(photo_link)
-        objective_scores.append(score)
+        result = analyzer.analyze_image(photo_link)
+        if result is None:
+            objective_labels.append(None)
+            objective_confidences.append(None)
+            objective_scores.append(None)
+            continue
+
+        # FaceAnalyzer -> (label, confidence, probabilities)
+        if len(result) == 3:
+            label, confidence, probabilities = result
+        else:
+            label, confidence = result
+            probabilities = None
+
+        objective_labels.append(label)
+        objective_confidences.append(confidence)
+        objective_scores.append(compute_score_from_probs(probabilities, label))
     
-    df['objective_fatigue'] = objective_scores
+    df['objective_fatigue_label'] = objective_labels
+    df['objective_fatigue_confidence'] = objective_confidences
+    df['objective_fatigue_score'] = objective_scores
     return df
 
 
@@ -141,8 +182,8 @@ def plot_fatigue_timeline(
                 alpha=0.5, label='主観的疲労度', color='blue', s=50)
     
     # 客観データがある箇所もプロット
-    df_with_obj = df[df['objective_fatigue'].notna()]
-    ax2.scatter(df_with_obj['hour'], df_with_obj['objective_fatigue'], 
+    df_with_obj = df[df['objective_fatigue_score'].notna()]
+    ax2.scatter(df_with_obj['hour'], df_with_obj['objective_fatigue_score'], 
                 alpha=0.5, label='客観的疲労度 (OpenFace)', color='red', s=50, marker='x')
     
     ax2.plot(hours, mean_corrected, 'r-', label='予測 (客観補正あり)', linewidth=2)
@@ -173,10 +214,10 @@ def plot_fatigue_timeline(
 
 def analyze_discrepancy(df: pd.DataFrame):
     """
-    主観と客観のズレ(乖離)を分析してレポート。→うまくこれをchatgpt apiに投げる？
+    主観と客観のズレ(乖離)を分析してレポート。
     """
-    #objective_fatigueが存在する行のみ抽出
-    df_valid = df[df['objective_fatigue'].notna()].copy()
+    #objective_fatigue_scoreが存在する行のみ抽出
+    df_valid = df[df['objective_fatigue_score'].notna()].copy()
     output_dir = Path("output")
     output_dir.mkdir(exist_ok=True)
     
@@ -184,7 +225,7 @@ def analyze_discrepancy(df: pd.DataFrame):
         print("客観データがないため、乖離分析をスキップします。")
         return
     
-    df_valid['discrepancy'] = df_valid['objective_fatigue'] - df_valid['subjective_fatigue']
+    df_valid['discrepancy'] = df_valid['objective_fatigue_score'] - df_valid['subjective_fatigue']
     
     # 統計情報
     mean_discrepancy = df_valid['discrepancy'].mean()
@@ -205,8 +246,8 @@ def analyze_discrepancy(df: pd.DataFrame):
     if len(underestimate_cases) > 0:
         print(f"\n【危険な「自覚なき疲労」の例】")
         print(underestimate_cases[['Timestamp', 'user_id', 'subjective_fatigue', 
-                                   'objective_fatigue', 'discrepancy']].head(5))
-    #TODO! これをChatGPT APIに渡してアドバイス生成とかに活用する？
+                       'objective_fatigue_score', 'discrepancy']].head(5))
+    #これをChatGPT APIに渡してアドバイス生成とかに活用する
     # --- ChatGPT APIに渡すと効果的な情報をtxtで保存 ---
     # 1. 乖離統計
     with open(output_dir / "discrepancy_stats.txt", "w", encoding="utf-8") as f:
@@ -221,7 +262,7 @@ def analyze_discrepancy(df: pd.DataFrame):
     df_valid.to_csv(output_dir / "all_fatigue_discrepancy.txt", sep="\t", index=False)
 
 
-# Placeholder for ChatGPT API integration
+# ChatGPT API integration
 def generate_advice(hours: list) -> str:
     """
     アドバイスを生成
@@ -376,11 +417,15 @@ def main(user_id):
     print(f"  - 期間: {df['Timestamp'].min()} ~ {df['Timestamp'].max()}")
     print(f"  - ユーザー数: {df['user_id'].nunique()}名")
     
-    # 2. 顔解析 (OpenFaceモック)
+    # 2. 顔解析 
     print("\n[2] 顔写真解析 (OpenFace)")
-    analyzer = FaceAnalyzer()
+    analyzer = FaceAnalyzer(
+        model_path=MODEL_PATH,
+        openface_bin=OPENFACE_BIN,
+        temp_dir=TEMP_DIR,
+    )
     df = analyze_faces(df, analyzer)
-    photo_count = df['objective_fatigue'].notna().sum()
+    photo_count = df['objective_fatigue_score'].notna().sum()
     print(f"  - 解析成功: {photo_count}件 / {len(df)}件")
     
     # 3. 乖離分析
@@ -411,7 +456,7 @@ def main(user_id):
     predictor_corrected.fit(
         df_user['Timestamp'],
         df_user['subjective_fatigue'].values,
-        df_user['objective_fatigue'].values
+        df_user['objective_fatigue_score'].values
     )
     print("  ✓ 客観補正モデル学習完了")
     
@@ -445,7 +490,7 @@ def main(user_id):
 
     #df_user は1ユーザーの全データ
     df_user["hour"] = df_user["Timestamp"].dt.hour
-    df_user["diff"]= df_user["objective_fatigue"]- df_user["subjective_fatigue"]
+    df_user["diff"]= df_user["objective_fatigue_score"]- df_user["subjective_fatigue"]
     median_by_hour= df_user.groupby("hour")["diff"].median()
     print("各時刻の客観-主観の中央値",median_by_hour)
     top2_hours = median_by_hour.dropna().sort_values(ascending=False).head(2).index.tolist()
