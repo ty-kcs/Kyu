@@ -42,9 +42,15 @@ from matplotlib import rcParams
 from matplotlib import font_manager
 
 # 日本語フォント設定
-rcParams['font.sans-serif'] = ['/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc']
-rcParams['font.family'] = 'sans-serif'
-rcParams['axes.unicode_minus'] = False
+font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+
+font_prop = font_manager.FontProperties(
+    fname=font_path,
+    size=12
+)
+
+rcParams["font.family"] = font_prop.get_name()
+rcParams["axes.unicode_minus"] = False
 
 # フォントが正しく設定されているか確認
 #print("Available fonts:", font_manager.findSystemFonts(fontpaths=None, fontext='ttf'))
